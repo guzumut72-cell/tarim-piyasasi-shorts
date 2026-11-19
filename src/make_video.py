@@ -97,11 +97,53 @@ def ensure_voice_model():
     return cache / f'{MODEL_NAME}.onnx'
 
 
-voice_path = OUT / 'voice.wav'
-voice_engine = 'Piper (tr_TR-fettah-medium)'
-voice = PiperVoice.load(ensure_voice_model())
-with wave.open(str(voice_path), 'wb') as narration:
-    voice.synthesize_wav(script, narration, syn_config=SynthesisConfig(length_scale=1.05))
+AZURE_VOICES = {'emel': 'tr-TR-EmelNeural', 'ahmet': 'tr-TR-AhmetNeural'}
+
+
+def make_narration(text):
+    choice = os.environ.get('SHORTS_VOICE', 'auto').lower()
+    key = os.environ.get('AZURE_SPEECH_KEY', '').strip()
+    region = os.environ.get('AZURE_SPEECH_REGION', '').strip().lower()
+
+    if choice == 'auto' and not key and not region:
+        path = OUT / 'voice.wav'
+        voice = PiperVoice.load(ensure_voice_model())
+        with wave.open(str(path), 'wb') as narration:
+            voice.synthesize_wav(text, narration, syn_config=SynthesisConfig(length_scale=1.05))
+        return path, 'Piper (tr_TR-fettah-medium)'
+
+    voice_name = AZURE_VOICES.get('emel' if choice == 'auto' else choice)
+    if not voice_name:
+        raise ValueError('SHORTS_VOICE must be auto, emel, or ahmet.')
+    if not key or not re.fullmatch(r'[a-z0-9]{2,24}', region):
+        raise RuntimeError('Set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION before using Azure Speech.')
+
+    ssml = (
+        '<speak version="1.0" xml:lang="tr-TR" xmlns="http://www.w3.org/2001/10/synthesis">'
+        f'<voice name="{voice_name}"><prosody rate="-4%">{html.escape(text)}</prosody></voice>'
+        '</speak>'
+    )
+    response = requests.post(
+        f'https://{region}.tts.speech.microsoft.com/cognitiveservices/v1',
+        headers={
+            'Ocp-Apim-Subscription-Key': key,
+            'Content-Type': 'application/ssml+xml',
+            'X-Microsoft-OutputFormat': 'audio-24khz-96kbitrate-mono-mp3',
+            'User-Agent': 'tarim-piyasasi-shorts',
+        },
+        data=ssml.encode('utf-8'),
+        timeout=(8, 30),
+        allow_redirects=False,
+    )
+    if response.status_code != 200 or not response.content:
+        raise RuntimeError(f'Azure Speech returned no audio (HTTP {response.status_code}).')
+
+    path = OUT / 'voice.mp3'
+    path.write_bytes(response.content)
+    return path, f'Azure Speech ({voice_name})'
+
+
+voice_path, voice_engine = make_narration(script)
 print(f'Narration generated with {voice_engine}.', flush=True)
 
 (OUT / 'script.txt').write_text(script, encoding='utf-8')
