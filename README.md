@@ -12,11 +12,11 @@ Tamamlanan çalışmada **Artifacts → agriculture-short** bölümünden şu do
 - `script.txt` — Seslendirme metni
 - `source.json` — Haber başlığı, bağlantısı, tarih bilgisi ve kullanılan ses motoru
 
-Çevrimiçi Edge TTS kullanılamazsa eSpeak NG ile çevrimdışı Türkçe seslendirme yapılır. Haber akışlarından geçerli başlık alınamazsa çalışma hata vererek durur.
+Seslendirme Piper'ın Fettah adlı Türkçe nöral sesiyle yapılır. Ses modeli ilk çalıştırmada indirilir ve yerelde saklanır. Bir haberin metni seslendirme için dışarıya gönderilmez. Haber akışlarından geçerli başlık alınamazsa çalışma hata vererek durur.
 
 ## Yerel çalıştırma
 
-Python 3.11, FFmpeg, DejaVu Sans ve eSpeak NG gerekir.
+Python 3.11, FFmpeg ve DejaVu Sans gerekir.
 
 ```bash
 python -m pip install -r requirements.txt
