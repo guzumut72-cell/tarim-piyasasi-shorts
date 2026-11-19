@@ -2,6 +2,15 @@ name: Daily agriculture short
 
 on:
   workflow_dispatch:
+    inputs:
+      voice:
+        description: "Türkçe ses"
+        type: choice
+        default: auto
+        options:
+          - auto
+          - emel
+          - ahmet
   schedule:
     - cron: '15 7 * * *'
 
@@ -26,6 +35,10 @@ jobs:
       - name: Install Python dependencies
         run: python -m pip install -r requirements.txt
       - name: Produce the Turkish short
+        env:
+          SHORTS_VOICE: ${{ inputs.voice || 'auto' }}
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: ${{ vars.AZURE_SPEECH_REGION }}
         run: python src/make_video.py
       - name: Verify video dimensions and audio
         run: |
