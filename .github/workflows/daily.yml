@@ -1,0 +1,55 @@
+name: Daily agriculture short
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 7 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-agriculture-short
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install video and speech tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core espeak-ng
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Produce the Turkish short
+        run: python src/make_video.py
+      - name: Verify video dimensions and audio
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+
+          info = json.loads(subprocess.check_output([
+              'ffprobe', '-v', 'error', '-show_streams', '-show_format',
+              '-of', 'json', 'output/short.mp4',
+          ]))
+          video = next(stream for stream in info['streams'] if stream['codec_type'] == 'video')
+          audio = next(stream for stream in info['streams'] if stream['codec_type'] == 'audio')
+          assert (video['width'], video['height']) == (1080, 1920)
+          assert 0 < float(audio['duration']) <= 180
+          assert 0 < float(info['format']['duration']) <= 180
+          print('Verified 1080 × 1920 video with audio.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agriculture-short
+          path: |
+            output/short.mp4
+            output/script.txt
+            output/source.json
+          if-no-files-found: error
+          retention-days: 7
