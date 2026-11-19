@@ -12,7 +12,9 @@ Tamamlanan çalışmada **Artifacts → agriculture-short** bölümünden şu do
 - `script.txt` — Seslendirme metni
 - `source.json` — Haber başlığı, bağlantısı, tarih bilgisi ve kullanılan ses motoru
 
-Seslendirme Piper'ın Fettah adlı Türkçe nöral sesiyle yapılır. Ses modeli ilk çalıştırmada indirilir ve yerelde saklanır. Bir haberin metni seslendirme için dışarıya gönderilmez. Haber akışlarından geçerli başlık alınamazsa çalışma hata vererek durur.
+Azure Speech bağlantısı hazır olduğunda günlük videolarda Emel kullanılır. Elle çalıştırırken **voice** alanından Emel veya Ahmet'i seçebilirsiniz. Seslendirme metni seçilen Azure Speech kaynağına gönderilir.
+
+Kurulumda Azure Speech **F0** kaynağının anahtarını GitHub Actions repository secret olarak `AZURE_SPEECH_KEY`, bölge kodunu Actions repository variable olarak `AZURE_SPEECH_REGION` adıyla girin. **auto** seçeneği, iki Azure değeri de boşken yerel Piper sesiyle çalışır. Haber akışlarından geçerli başlık alınamazsa çalışma hata vererek durur.
 
 ## Yerel çalıştırma
 
