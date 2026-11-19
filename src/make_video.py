@@ -1,12 +1,19 @@
 """No-cost starter: RSS -> attributed short script -> Turkish TTS -> vertical MP4.
 Not an LLM or verified viral trend detector. Human review required before publication.
 """
-import asyncio, html, json, re, subprocess
+import hashlib
+import html
+import json
+import os
+import re
+import subprocess
+import tempfile
+import wave
 from datetime import datetime, timezone
 from pathlib import Path
 import feedparser
 import requests
-import edge_tts
+from piper import PiperVoice, SynthesisConfig
 from PIL import Image, ImageDraw, ImageFont
 
 OUT = Path('output'); OUT.mkdir(exist_ok=True)
@@ -49,22 +56,53 @@ script = (f'Tarım gündeminde bugün: {title}. '
           f'Bu başlık, {source} kaynağında yer alıyor. '
           'Haberin ayrıntıları ve olası piyasa etkileri için kaynak bağlantısını inceleyin. '
           'Bu video, otomatik hazırlanmış bir haber özeti denemesidir.')
-async def make_online_voice(path):
-    voice = edge_tts.Communicate(script, 'tr-TR-AhmetNeural')
-    await asyncio.wait_for(voice.save(str(path)), timeout=30)
+MODEL_NAME = 'tr_TR-fettah-medium'
+MODEL_BASE = (
+    'https://huggingface.co/rhasspy/piper-voices/resolve/'
+    '320d5f7f7751a17ef6512d5c23863056c6a11c0f/tr/tr_TR/fettah/medium'
+)
+MODEL_FILES = {
+    f'{MODEL_NAME}.onnx': '5d14d5222f36aea2b8fc8dba097fcb18dcf8f5b33e5b2aa76b5e0b44602aa8d7',
+    f'{MODEL_NAME}.onnx.json': '0738ecd770d4102fa967a784ae89f64d846b1b5f104076e410c978fefa70b3e7',
+}
 
-voice_path = OUT / 'voice.mp3'
-voice_engine = 'Edge TTS (tr-TR-AhmetNeural)'
-try:
-    asyncio.run(make_online_voice(voice_path))
-    if not voice_path.stat().st_size:
-        raise RuntimeError('The voice service returned no audio.')
-except Exception as error:
-    print(f'Online narration unavailable ({type(error).__name__}); using eSpeak NG.', flush=True)
-    voice_path.unlink(missing_ok=True)
-    voice_path = OUT / 'voice.wav'
-    voice_engine = 'eSpeak NG (tr)'
-    subprocess.run(['espeak-ng', '-v', 'tr', '-s', '155', '-w', str(voice_path), script], check=True)
+
+def ensure_voice_model():
+    cache = Path(os.environ.get('XDG_CACHE_HOME') or Path.home() / '.cache') / 'tarim-shorts'
+    cache.mkdir(parents=True, exist_ok=True)
+
+    for filename, checksum in MODEL_FILES.items():
+        destination = cache / filename
+        if destination.is_file():
+            with destination.open('rb') as existing:
+                if hashlib.file_digest(existing, 'sha256').hexdigest() == checksum:
+                    continue
+
+        with tempfile.NamedTemporaryFile(dir=cache, delete=False) as temporary:
+            download = Path(temporary.name)
+        try:
+            digest = hashlib.sha256()
+            with requests.get(f'{MODEL_BASE}/{filename}', stream=True, timeout=(10, 90)) as response:
+                response.raise_for_status()
+                with download.open('wb') as output:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        output.write(chunk)
+                        digest.update(chunk)
+            if digest.hexdigest() != checksum:
+                raise RuntimeError(f'Voice model checksum did not match: {filename}')
+            download.replace(destination)
+        finally:
+            download.unlink(missing_ok=True)
+
+    return cache / f'{MODEL_NAME}.onnx'
+
+
+voice_path = OUT / 'voice.wav'
+voice_engine = 'Piper (tr_TR-fettah-medium)'
+voice = PiperVoice.load(ensure_voice_model())
+with wave.open(str(voice_path), 'wb') as narration:
+    voice.synthesize_wav(script, narration, syn_config=SynthesisConfig(length_scale=1.05))
+print(f'Narration generated with {voice_engine}.', flush=True)
 
 (OUT / 'script.txt').write_text(script, encoding='utf-8')
 metadata = {
